@@ -1,4 +1,5 @@
 """AnimeSR Engine Module"""
+import os
 from typing import Any, Tuple
 import torch
 import onnxruntime as ort
@@ -23,6 +24,8 @@ class AnimeSREngine(IORTEngine):
     ) -> None:
         if device_name == "cuda":
             assert torch.cuda.is_available(), "ERROR::CUDA not available."
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = f"{device_id}"
         self.onnx_path = onnx_path
         self.device_name = device_name
         self.device_id = device_id
