@@ -1,5 +1,5 @@
 """AnimeSR Engine Module"""
-from typing import Any
+from typing import Any, Tuple
 import torch
 import onnxruntime as ort
 import numpy as np
@@ -26,7 +26,7 @@ class AnimeSREngine(IORTEngine):
         self.onnx_path = onnx_path
         self.device_name = device_name
         self.device_id = device_id
-        self.io_shapes = {
+        self.io_shape = {
             "input_frames": [model_batch, 3 * 3, input_height, input_width],
             "output_frame": [
                 model_batch,
@@ -46,7 +46,6 @@ class AnimeSREngine(IORTEngine):
                 },
             ),
         ]
-        self.result_images = self.make_result_buffer()
 
         # init
         super().__init__()
@@ -98,6 +97,12 @@ class AnimeSREngine(IORTEngine):
             for key in self.io_data_cpu
         }
 
+        # set input, output
+        _b, _c, _h, _w = self.io_shape["input_frames"]
+        self.input_data = np.zeros([_b, _h, _w, _c], np.uint8)
+        _b, _c, _h, _w = self.io_shape["output_frame"]
+        self.output_data = np.zeros([_b, _h, _w, _c], np.uint8)
+
     def _bind_model_io(self) -> None:
         io_binding = self.io_binding
         io_data_ort = self.io_data_ort
@@ -109,20 +114,15 @@ class AnimeSREngine(IORTEngine):
         io_binding.bind_ortvalue_output("output_state", io_data_ort["output_state"])
         io_binding.bind_ortvalue_output("output_frame", io_data_ort["output_frame"])
 
-    def make_result_buffer(self) -> np.ndarray:
-        """make result buffer"""
-        # init
-        io_shapes: dict = self.io_shapes
-
-        # manual work required.
-        _b, _c, _h, _w = io_shapes["output_frame"]
-        return np.zeros([_b, _h, _w, _c], np.uint8)
-
     def get_output_data(self) -> Any:
         return self.output_data
 
-    def set_input_data(self, data: Any) -> None:
-        self.input_data = data
+    def set_input_data(self, data: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> None:
+        """
+        data : tuple of 3 np.ndarrays
+        """
+        for _c in range(9):
+            self.input_data[:, :, :, _c] = data[int(_c / 3)][:, :, int(_c % 3)]
 
     def convert_data2input(self) -> None:
         io_data_cpu = self.io_data_cpu
@@ -130,10 +130,8 @@ class AnimeSREngine(IORTEngine):
 
         # manual work required.
         image_raw = np.divide(input_data, 255.0, dtype=np.float32)
-        for c in range(9):
-            io_data_cpu["input_frames"][:, c, :, :] = image_raw[
-                int(c / 3), :, :, int(c % 3)
-            ]
+        for _c in range(9):
+            io_data_cpu["input_frames"][:, _c, :, :] = image_raw[:, :, :, _c]
 
     def move_host2device(self) -> None:
         # init
@@ -162,7 +160,7 @@ class AnimeSREngine(IORTEngine):
     def convert_output2data(self):
         # init
         io_data_cpu: dict = self.io_data_cpu
-        result_images: np.ndarray = self.result_images
+        result_images: np.ndarray = self.output_data
 
         # manual work required.
         output = np.clip(np.multiply(io_data_cpu["output_frame"], 255.0), 0, 255)
