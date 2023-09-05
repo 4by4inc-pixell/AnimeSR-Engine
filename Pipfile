@@ -10,6 +10,8 @@ ortei = "*"
 torch = "*"
 
 [dev-packages]
+albumentations = "*"
+tqdm = "*"
 
 [requires]
 python_version = "3.8"
