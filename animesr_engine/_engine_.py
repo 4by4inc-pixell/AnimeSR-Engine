@@ -62,17 +62,7 @@ class AnimeSREngine(IORTEngine):
         onnx_fp32_path = self.onnx_path
         device_name = self.device_name
         device_id = self.device_id
-        providers = [
-            (
-                "CUDAExecutionProvider",
-                {
-                    "cudnn_conv_use_max_workspace": "1",
-                    "cudnn_conv_algo_search": "HEURISTIC",  # HEURISTIC, EXHAUSTIVE
-                    "do_copy_in_default_stream": True,
-                },
-            ),
-            # 'CPUExecutionProvider'
-        ]
+        providers = self.providers
 
         # set session options
         self.session_options = ort.SessionOptions()
