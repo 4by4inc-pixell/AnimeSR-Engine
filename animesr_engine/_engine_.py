@@ -1,8 +1,8 @@
 """AnimeSR Engine Module"""
 import os
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 import torch
-import onnxruntime as ort
+import onnxruntime as ort  # ORT 선언 전 torch import 필수
 import numpy as np
 from ortei import IORTEngine
 
@@ -21,11 +21,15 @@ class AnimeSREngine(IORTEngine):
         upscale_rate=4,
         input_height=1080,
         input_width=1920,
+        providers: Optional[list] = None,
     ) -> None:
-        if device_name == "cuda":
-            assert torch.cuda.is_available(), "ERROR::CUDA not available."
+        print(f"AnimeSREngine[{device_id}]::Init::Start")
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = f"{device_id}"
+
+        if device_name == "cuda":
+            assert torch.cuda.is_available(), "ERROR::CUDA not available."
+
         self.onnx_path = onnx_path
         self.device_name = device_name
         self.device_id = device_id
@@ -39,16 +43,24 @@ class AnimeSREngine(IORTEngine):
             ],
             "output_state": [model_batch, 64, input_height, input_width],
         }
-        self.providers = [
-            (
-                "CUDAExecutionProvider",
-                {
-                    "cudnn_conv_use_max_workspace": "1",
-                    "cudnn_conv_algo_search": "HEURISTIC",  # HEURISTIC, EXHAUSTIVE
-                    "do_copy_in_default_stream": True,
-                },
-            ),
-        ]
+        os.environ["CUDA_MODULE_LOADING"] = "LAZY"
+        if providers is None:
+            self.providers = [
+                (
+                    "CUDAExecutionProvider",
+                    {
+                        "cudnn_conv_use_max_workspace": "1",
+                        "cudnn_conv_algo_search": "HEURISTIC",  # HEURISTIC, EXHAUSTIVE
+                        "do_copy_in_default_stream": True,
+                    },
+                ),
+            ]
+
+        for _prov in self.providers:
+            _pname, _poption = _prov
+            assert all(
+                [_key != "device_id" for _key in list(_poption.keys())]
+            ), "provider option - device_id is not supported."
 
         # init
         super().__init__()
@@ -56,6 +68,7 @@ class AnimeSREngine(IORTEngine):
 
         # warm-up
         self.inference()
+        print(f"AnimeSREngine[{device_id}]::Init::End")
 
     def _init_members(self):
         # set variable
@@ -85,7 +98,9 @@ class AnimeSREngine(IORTEngine):
         }
         self.io_data_ort = {
             key: ort.OrtValue.ortvalue_from_numpy(
-                self.io_data_cpu[key], device_name, device_id
+                self.io_data_cpu[key],
+                device_name,
+                device_id=0,  # device_id 설정시 오류 발생
             )
             for key in self.io_data_cpu
         }
